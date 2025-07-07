@@ -1,0 +1,20 @@
+pandas
+pyMuPDF
+langchain
+faiss-cpu
+together
+openai
+fastapi      # si despliegas micro-servicios
+uvicorn
+streamlit
+langchain-together
+langchain-community
+openpyxl
+langchain-huggingface
+sentence-transformers
+numpy
+whoosh
+#pip install -U "sentence-transformers>=2.7" faiss-cpu accelerate
+#pip install -U langchain langchain-experimental
+tqdm
+python-dateutil
