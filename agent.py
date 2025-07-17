@@ -10,15 +10,17 @@ from tools.estadistica import run as estadistica_run
 from tools.comparar import run as comparar_run
 from tools.borrador_alerta import run as alerta_run
 from tools.consulta_doc import run as consulta_run, _set_active, extract_identifier  # ← importa setter
-from tools.estadistica_ai import run as estadistica_ai_run
+#from tools.estadistica_ai import run as estadistica_ai_run
+from tools.auditoria_ley import run as auditoria_ley_run
 TOOL_MAP = {
     "expediente": expediente_run,
     "resumen_doc": resumen_run,
     "estadistica": estadistica_run,
-    "estadistica_ai": estadistica_ai_run,
+    #"estadistica_ai": estadistica_ai_run,
     "comparar_juris": comparar_run,
     "borrador_alerta": alerta_run,
-    "consulta_doc": consulta_run # ← NUEVO label
+    "consulta_doc": consulta_run, # ← NUEVO label
+    "auditoria_ley": auditoria_ley_run
 }
 from tools.consulta_doc import extract_identifier, _set_active
 from vectorstore import search_by_text

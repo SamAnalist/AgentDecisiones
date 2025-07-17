@@ -47,6 +47,7 @@ def run(msg: str) -> str:
 
     # Llamada al LLM pidiendo JSON
     prompt = (
+
         "Devuelve SOLO JSON con clave 'borrador' que contenga "
         "el texto del borrador de fallo para esta petición judicial:\n\n"
         f"{msg}"

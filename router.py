@@ -8,19 +8,20 @@ LABELS = (
     "resumen_doc",
     "consulta_doc",   # ← NUEVO label
     "estadistica",
-    "estadistica_ai",
+    #"estadistica_ai",
     "comparar_juris",
     "borrador_alerta",
+    "auditoria_ley",
     "desconocido",
 )
 
 
 client = Together(api_key=TOGETHER_API_KEY)
 EXAMPLES = [
-{"role": "user", "content": "¿Cuántos casos de robo hay en la base?"},
-{"role": "assistant", "content": "estadistica_ai"},
-{"role": "user", "content": "Promedio de indemnizaciones por homicidio 2023"},
-{"role": "assistant", "content": "estadistica_ai"},
+#{"role": "user", "content": "¿Cuántos casos de robo hay en la base?"},
+#{"role": "assistant", "content": "estadistica_ai"},
+#{"role": "user", "content": "Promedio de indemnizaciones por homicidio 2023"},
+#{"role": "assistant", "content": "estadistica_ai"},
 {"role": "user", "content": "¿Cuántas sentencias dictó la Segunda Sala en 2024?"},
 {"role": "assistant", "content": "estadistica"},
 ]
@@ -38,13 +39,15 @@ SYSTEM_PROMPT = (
     "- estadistica → *la métrica se puede calcular SOLO con columnas "
     "  explícitas del DataFrame* (ej.: '¿cuántos fallos en 2023?', "
     "  'promedio de indemnización en Materia = Laboral')\n"
-    "- estadistica_ai → pide conteo/estadística sobre conceptos que NO son "
-    "  columnas directas (delitos, hechos, doctrinas). Ej.: "
-    "  '¿cuántos casos de robo?', 'promedio de indemnización por incendio', "
-    "  'porcentaje de demandas contra EDESUR'.  Estas consultas requieren "
-    "  búsqueda semántica en los **embeddings** de textoPDF.\n"
+    #"- estadistica_ai → pide conteo/estadística sobre conceptos que NO son "
+    # "  columnas directas (delitos, hechos, doctrinas). Ej.: "
+    # "  '¿cuántos casos de robo?', 'promedio de indemnización por incendio', "
+    # "  'porcentaje de demandas contra EDESUR'.  Estas consultas requieren "
+    # "  búsqueda semántica en los **embeddings** de textoPDF.\n"
     "- comparar_juris → busca precedentes o casos similares\n"
     "- borrador_alerta → plazos, vencimientos, alertas procesales\n"
+    "• auditoria_ley      –  solicita verificar artículos citados/omitidos o "
+    "                        auditar un borrador de fallo frente al corpus legal\n"
     "- desconocido → todo lo demás\n"
     "Devuelve solo la etiqueta, sin explicaciones."
 
@@ -55,8 +58,8 @@ def detect_intent(msg: str) -> Literal[
     "resumen_doc",
     "consulta_doc",
     "estadistica",
-    "estadistica_ai",
     "comparar_juris",
+    "auditoria_ley",
     "borrador_alerta",
     "desconocido",
 ]:

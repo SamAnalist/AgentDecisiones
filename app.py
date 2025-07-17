@@ -5,12 +5,12 @@ from agent import responder_pregunta
 from feedback_logger import log_interaction
 from router import detect_intent
 
-st.set_page_config(page_title="Asistente Judicial • RAG + Llama-4")
+st.set_page_config(page_title="Asistente Judicial ")
 
 if "history" not in st.session_state:
     st.session_state.history = []
 
-st.title("Asistente Judicial · RAG + Llama-4 Maverick")
+st.title("Asistente Judicial · Poder Judicial")
 
 # Mostrar historial completo con burbujas de chat
 for q, a in st.session_state.history:

@@ -25,7 +25,8 @@ import pandas as pd
 from langchain.schema import Document
 from config import DATA_DIR, CHUNK_SIZE, CHUNK_OVERLAP
 
-CHUNKS_DIR = os.path.join(DATA_DIR, "chunks")
+CHUNKS_DIR = DATA_DIR / "chunks"           # ← define la ruta
+
 os.makedirs(CHUNKS_DIR, exist_ok=True)
 
 

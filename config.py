@@ -29,6 +29,8 @@ CHUNK_SIZE      = 750       # tokens aprox.
 CHUNK_OVERLAP   = 80
 SIM_THRESHOLD   = 0.5     # coseno mínimo para “encontrado”
 K_RETRIEVE      = 5
+SIM_THRESHOLD_est = 1.0            # <= 1.0 se considera match
+GREY_MARGIN   = 0.15
 
 # ──────────── Feedback ────────────
 SCORES     = {"Acepta": 1, "Parcial": 0, "Rechaza": -1}

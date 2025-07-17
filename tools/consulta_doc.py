@@ -16,7 +16,13 @@ from memory import memory
 # ───────────────────────── LLM ──────────────────────────
 _client = Together(api_key=TOGETHER_API_KEY)
 
-active_doc: Optional[dict] = None            # lo llena el hook
+# tools/consulta_doc.py  ─ añade al comienzo del archivo
+import streamlit as st          # ⬅️  NUEVO
+# Inicializa una vez el slot de sesión
+if "active_doc" not in st.session_state:
+    st.session_state["active_doc"] = None
+# … debajo de la declaración original …
+active_doc: Optional[dict] = st.session_state.get("active_doc")  # ← carga si existe
 
 # ────────────── CARGA DE CHUNKS (idéntico a resumen_doc) ──────────────
 CHUNKS_DIR = os.path.join(DATA_DIR, "chunks")
@@ -73,6 +79,8 @@ def _doc_id(doc) -> Optional[str]:
 def _set_active(doc):
     global active_doc
     active_doc = doc
+    st.session_state["active_doc"] = doc     # ⬅️  persiste en la sesión
+
 
 # ────────────── QA multi-llamada (divide si es demasiado largo) ───────
 MAX_CHARS_PER_CALL = 100_000             # ≈ 25 000 tokens
@@ -124,6 +132,7 @@ def _build_context(doc_id_norm: str) -> str:
 
 # ────────────── API principal ─────────────────────────────────────────
 def run(user_msg: str) -> str:
+    global active_doc           # ⬅️  AÑADE ESTO
     ident = extract_identifier(user_msg)
     if ident:
         ident_norm = ident.lower().strip()
@@ -133,9 +142,11 @@ def run(user_msg: str) -> str:
             "DocumentID": ident_norm
         })
 
+    if active_doc is None:  # pudo “perderse” tras el rerun
+        active_doc = st.session_state.get("active_doc")
+
     if not active_doc:
         return "⚠️ No hay ninguna sentencia activa. Indica el número de caso."
-
     did = _doc_id(active_doc)
     if not did:
         return "⚠️ La sentencia activa no tiene identificador reconocible."

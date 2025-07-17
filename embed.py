@@ -1,26 +1,28 @@
-"""
-embed.py — Embeddings locales con RoBERTa‑BNE.
---------------------------------------------------------------------
-• Genera vectores L2‑normalizados con Sentence‑Transformers.
-• Procesa en lotes con un bucle simple; evita multi‑processing para compatibilidad
-  con Windows (spawn) y entornos notebook.
-• Si tu dataset es enorme y usas Linux, puedes re‑activar encode_multi_process()
-  añadiendo `USE_MP=True` y ejecutando el script principal bajo
-  `if __name__ == "__main__": …`.
-"""
-
-from typing import List
+# embed.py
 
 from sentence_transformers import SentenceTransformer
+from config import EMBED_MODEL_ID
+from typing import List
+from langchain_huggingface import HuggingFaceEmbeddings
+_model = SentenceTransformer(EMBED_MODEL_ID)   # ← ESTA línea debe existir
+
+
+# Tu wrapper para RoBERTa-BNE sigue igual:
 from langchain_core.embeddings import Embeddings
 
-from config import EMBED_MODEL_ID
+# ---------------------------
 
-# ───────── Configurables ──────────────────────────────────────────
-MAX_BATCH: int = 64   # tamaño del lote; 64 → ~1 GB RAM para 768‑dim
+def get_embeddings(kind: str = "cases"):
+    if kind == "laws":
+        # Usamos el wrapper oficial con normalización L2
+        return HuggingFaceEmbeddings(
+            model_name="mrm8488/bart-legal-base-es",
+            model_kwargs={"device": "cpu"},              # o "cuda"
+            encode_kwargs={"normalize_embeddings": True},# ← muy importante
+        )
+    # Si es "cases", seguimos con tu wrapper local
+    return BNEEmbeddings()
 
-# ─────── Carga única del modelo ──────────────────────────────────
-_model = SentenceTransformer(EMBED_MODEL_ID)
 
 # ─────────────────────────────────────────────────────────────────
 # Helpers internos
@@ -32,7 +34,7 @@ def _batchify(texts: List[str], batch: int):
         yield texts[i : i + batch]
 
 
-def _encode(texts: List[str]):
+def _encode(texts: List[str], MAX_BATCH=None):
     """Devuelve embeddings normalizados en batches secuenciales."""
     vectors = []
     for chunk in _batchify(texts, MAX_BATCH):
