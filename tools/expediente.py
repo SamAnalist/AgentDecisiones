@@ -80,36 +80,41 @@ def run(msg: str) -> str:
     row = _match_row(msg)
     from tools.consulta_doc import _set_active
     _set_active({"metadata": {"NUC": row["NUC"].lower()}})
-
+    print("El numero de caso extraido: ",row["NUC"].lower() )
     if row is None:
         return "⚠️ No encontré ese expediente (NUC) ni IdDocumento en la Juriteca."
 
     # Recuperar top-1 chunk para contexto
-    q_vec = emb.embed_query(row["textoPDF"][:4096])
+    q_vec = emb.embed_query(row["textoPDF"])
     docs = search_by_vector(q_vec, k=1)
     if not docs:
         return "⚠️ No hay texto disponible para ese documento."
 
     contenido = docs[0].page_content
     prompt = (
-        "Devuelve SOLO JSON con claves "
-        '{"resumen","considerandos","fallo_literal"} para este contenido:\n\n'
+        "Arma un expediente en formato ejecutivo extrayendo cada uno de estos puntos del texto que será proporcionado: "
+        f"""
+- Numero de tramite : Numero de tramite mencionado en el texto si existe
+- Numero de Caso (NUC): {row["NUC"].lower()}
+- Parte demandada: Extrae los involucrados demandados en el caso con un formato de listado con Nombre completo y documento de identificación validos (Pasaporte/Cedula de identidad)
+- Parte demandante:  Extrae los involucrados demandantes en el caso con un formato de listado con Nombre completo y documento de identificación validos (Pasaporte/Cedula de identidad)
+- Representantes de la parte demandada: Extrae los representantes demandados en el caso con un formato de listado con Nombre completo,  documento de identificación validos (Pasaporte/Cedula de identidad) y matricula de abogado (si existe, si no, no mencionar.) 
+- Representantes de la parte demandante: Extrae los representantes de los demandantes en el caso con un formato de listado con Nombre completo,  documento de identificación validos (Pasaporte/Cedula de identidad) y matricula de abogado (si existe, si no, no mencionar.) 
+- Juez: Nombre completo del juez encargado de la sentencia. 
+- Secretario: Secretario encargado de la sentencia.
+- Articulos considerados: En los considerandos, extrae el texto donde se mencionan los articulos y desarrolla como fueron ejecutados.
+- Fallo: {row["TipoFallo"]} 
+Aquí tienes el texto.
+        """
         f"{contenido}"
     )
 
     resp = _client.chat.completions.create(
         model=LLM_MODEL_ID,
         messages=[{"role": "user", "content": prompt}],
-        response_format={"type": "json_object"},
-        temperature=0.2,
-        max_tokens=512,
+        temperature=0.0,
+        max_tokens=2200,
     )
-    data = json.loads(resp.choices[0].message.content)
 
     # Formateo Markdown
-    return (
-        f"### Expediente {row['NUC']} / Documento {row['IdDocumento']}\n"
-        f"- **Resumen**: {data.get('resumen','–')}\n"
-        f"- **Considerandos**: {data.get('considerandos','–')}\n"
-        f"- **Decisión literal**: {data.get('fallo_literal','–')}"
-    )
+    return resp.choices[0].message.content

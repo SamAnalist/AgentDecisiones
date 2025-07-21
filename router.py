@@ -10,6 +10,7 @@ LABELS = (
     "estadistica",
     #"estadistica_ai",
     "comparar_juris",
+    "consulta_concepto",
     "borrador_alerta",
     "auditoria_ley",
     "desconocido",
@@ -24,6 +25,10 @@ EXAMPLES = [
 #{"role": "assistant", "content": "estadistica_ai"},
 {"role": "user", "content": "¿Cuántas sentencias dictó la Segunda Sala en 2024?"},
 {"role": "assistant", "content": "estadistica"},
+{"role": "user", "content": "Resume el caso de numero de caso 532-2020-ECON-00560"},
+{"role": "assistant", "content": "resumen_doc"},
+{"role": "user", "content": "Escribe un expediente del caso de numero de caso 532-2020-ECON-00560"},
+{"role": "assistant", "content": "expediente"},
 ]
 SYSTEM_PROMPT = (
     "Eres un asistente jurídico que CLASIFICA la intención de una pregunta.\n"
@@ -33,8 +38,8 @@ SYSTEM_PROMPT = (
     "   'Materia', 'TipoFallo', 'FechaDecision', 'textoPDF', ...]\n"
     "• Sentencias activas (texto completo en memoria)\n\n"
     "Devuelve SOLO UNA de estas etiquetas:\n"
-    "- expediente → la pregunta menciona un identificador (NUC, IdDocumento...)\n"
-    "- resumen_doc → pide un resumen de un documento citado por id\n"
+    "- expediente → El usuario consulta un expediente sobre un caso con un identificador\n"
+    "- resumen_doc → El usuario pide explicitamente un resumen de un documento citado por id\n"
     "- consulta_doc → pregunta detalles del documento activo\n"
     "- estadistica → *la métrica se puede calcular SOLO con columnas "
     "  explícitas del DataFrame* (ej.: '¿cuántos fallos en 2023?', "
@@ -48,9 +53,9 @@ SYSTEM_PROMPT = (
     "- borrador_alerta → plazos, vencimientos, alertas procesales\n"
     "• auditoria_ley      –  solicita verificar artículos citados/omitidos o "
     "                        auditar un borrador de fallo frente al corpus legal\n"
+    "- consulta_concepto → definiciones y aclaraciones jurídicas puntuales.\n"
     "- desconocido → todo lo demás\n"
     "Devuelve solo la etiqueta, sin explicaciones."
-
 )
 
 def detect_intent(msg: str) -> Literal[
@@ -59,6 +64,7 @@ def detect_intent(msg: str) -> Literal[
     "consulta_doc",
     "estadistica",
     "comparar_juris",
+    "consulta_concepto",
     "auditoria_ley",
     "borrador_alerta",
     "desconocido",
@@ -70,8 +76,7 @@ def detect_intent(msg: str) -> Literal[
         temperature=0.0,
     )
     label = response.choices[0].message.content.strip().lower()
-    import streamlit
-    streamlit.write(label)
+    print("Ve aqui lo que recibe y envia el router: ",msg,"", label)
     if label in LABELS:
         return label
     return "desconocido"

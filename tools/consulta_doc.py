@@ -2,12 +2,17 @@
 """
 • Usa exactamente los mismos chunks que resumen_doc (cargados desde /chunks/*.json)
 • Si el contexto supera MAX_CHARS_PER_CALL, lo divide en varios requests
+
+Este módulo se ha simplificado para **eliminar cualquier dependencia de Streamlit**.  Ahora la
+única memoria de trabajo es la variable de módulo `active_doc`.  Si necesitas
+persistencia entre peticiones, gestiona el identificador de sentencia a nivel de
+llamada (por ejemplo, almacenándolo en la base de datos o en un token de
+sesión) y pásalo explícitamente a tu lógica.
 """
 
 from __future__ import annotations
 import os, json, re
-from typing import Optional, List
-from itertools import islice
+from typing import Optional
 
 from together import Together
 from config import TOGETHER_API_KEY, LLM_MODEL_ID, DATA_DIR
@@ -16,13 +21,9 @@ from memory import memory
 # ───────────────────────── LLM ──────────────────────────
 _client = Together(api_key=TOGETHER_API_KEY)
 
-# tools/consulta_doc.py  ─ añade al comienzo del archivo
-import streamlit as st          # ⬅️  NUEVO
-# Inicializa una vez el slot de sesión
-if "active_doc" not in st.session_state:
-    st.session_state["active_doc"] = None
-# … debajo de la declaración original …
-active_doc: Optional[dict] = st.session_state.get("active_doc")  # ← carga si existe
+# ─────────────── Estado en memoria ─────────────────────
+# El documento activo se mantiene sólo en memoria de proceso.
+active_doc: Optional[dict] = None
 
 # ────────────── CARGA DE CHUNKS (idéntico a resumen_doc) ──────────────
 CHUNKS_DIR = os.path.join(DATA_DIR, "chunks")
@@ -77,13 +78,13 @@ def _doc_id(doc) -> Optional[str]:
 
 
 def _set_active(doc):
+    """Define el documento activo en memoria."""
     global active_doc
     active_doc = doc
-    st.session_state["active_doc"] = doc     # ⬅️  persiste en la sesión
 
 
 # ────────────── QA multi-llamada (divide si es demasiado largo) ───────
-MAX_CHARS_PER_CALL = 100_000             # ≈ 25 000 tokens
+MAX_CHARS_PER_CALL = 100_000             # ≈ 25 000 tokens
 
 def _split_by_size(text: str, max_chars: int):
     pos = 0
@@ -106,9 +107,11 @@ def _ask_llm(system: str, user: str, max_tok: int = 768) -> str:
     return resp.choices[0].message.content.strip()
 
 def _qa_part(context: str, question: str) -> str:
-    sys = ("Eres un asistente jurídico experto en jurisprudencia dominicana. "
-           "Responde SOLO con la información en CONTEXTO. "
-           "Si falta, di: 'No hay información suficiente en la sentencia'.")
+    sys = (
+        "Eres un asistente jurídico experto en jurisprudencia dominicana. "
+        "Responde SOLO con la información en CONTEXTO. "
+        "Si falta, di: 'No hay información suficiente en la sentencia'."
+    )
     usr = f"CONTEXTO:\n{context}\n\nPREGUNTA:\n{question}"
     return _ask_llm(sys, usr)
 
@@ -126,27 +129,29 @@ def _qa_multi(context_full: str, question: str) -> str:
     return merged or "No hay información suficiente en la sentencia."
 
 # ────────────── build context (TODOS los chunks) ──────────────────────
+
 def _build_context(doc_id_norm: str) -> str:
     chunks = docs_map.get(doc_id_norm, [])
     return "\n\n".join(chunks)
 
 # ────────────── API principal ─────────────────────────────────────────
+
 def run(user_msg: str) -> str:
-    global active_doc           # ⬅️  AÑADE ESTO
+    """Ejecuta la consulta sobre la sentencia activa o la que indique el usuario."""
+    global active_doc
+
     ident = extract_identifier(user_msg)
     if ident:
         ident_norm = ident.lower().strip()
         _set_active({
             "NUC": ident_norm,
             "NumeroTramite": ident_norm,
-            "DocumentID": ident_norm
+            "DocumentID": ident_norm,
         })
-
-    if active_doc is None:  # pudo “perderse” tras el rerun
-        active_doc = st.session_state.get("active_doc")
 
     if not active_doc:
         return "⚠️ No hay ninguna sentencia activa. Indica el número de caso."
+
     did = _doc_id(active_doc)
     if not did:
         return "⚠️ La sentencia activa no tiene identificador reconocible."

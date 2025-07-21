@@ -27,7 +27,7 @@ EMBED_MODEL_ID = (
 # ──────────── VectorStore ────────────
 CHUNK_SIZE      = 750       # tokens aprox.
 CHUNK_OVERLAP   = 80
-SIM_THRESHOLD   = 0.5     # coseno mínimo para “encontrado”
+SIM_THRESHOLD   = 0.8     # coseno mínimo para “encontrado”
 K_RETRIEVE      = 5
 SIM_THRESHOLD_est = 1.0            # <= 1.0 se considera match
 GREY_MARGIN   = 0.15

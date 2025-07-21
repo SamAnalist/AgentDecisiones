@@ -109,8 +109,8 @@ def run(msg: str) -> str:
             )
         return "⚠️ No encontré ese expediente ni identificadores similares en la Juriteca."
 
-    # Concatenar los primeros 3 chunks
-    content = "\n\n".join(chunks[:3])
+    # Concatenar todos los chunks chunks
+    content = "\n\n".join(chunks)
 
     # Prompt al LLM
     prompt = (
@@ -126,7 +126,7 @@ def run(msg: str) -> str:
             messages=[{"role": "user", "content": prompt}],
             response_format={"type": "json_object"},
             temperature=0.0,
-            max_tokens=512,
+            max_tokens=1500,
         )
         data = loads(resp.choices[0].message.content)
         return (

@@ -16,7 +16,7 @@ def get_embeddings(kind: str = "cases"):
     if kind == "laws":
         # Usamos el wrapper oficial con normalización L2
         return HuggingFaceEmbeddings(
-            model_name="mrm8488/bart-legal-base-es",
+            model_name=EMBED_MODEL_ID,
             model_kwargs={"device": "cpu"},              # o "cuda"
             encode_kwargs={"normalize_embeddings": True},# ← muy importante
         )

@@ -31,7 +31,7 @@ def run(msg: str) -> str:
         "Estos son los casos encontrados más parecidos al presentado.\n"
         + context
     )
-
+    print(context)
     try:
         resp = client.chat.completions.create(
             model=LLM_MODEL_ID,
