@@ -15,6 +15,7 @@ sentence-transformers
 numpy
 whoosh
 #pip install -U langchain-huggingface
+duckduckgo-search
 #pip install -U "sentence-transformers>=2.7" faiss-cpu accelerate
 #pip install -U langchain langchain-experimental
 tqdm

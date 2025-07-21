@@ -1,108 +1,88 @@
-# tools/consulta_concepto.py
-"""
-Módulo: consulta_concepto
-------------------------
-Query libre para tu agente RAG legal.  Responde definiciones, conceptos,
-procedimientos y aclaraciones jurídicas; mantiene memoria para no
-repetir explicaciones y fundamenta sus respuestas en los pasajes
-recuperados de tu índice legal.
-
-Requisitos previos en tu stack:
-    • law_search.search_with_scores(text, k)  ->  [(Document, score), ...]
-    • embed.get_embeddings(name)              ->  Embeddings
-    • memory      :  objeto con .get(key), .set(key, value),
-                     .last_n_turns(n) ó .summary()
-    • variables en config.py:
-          SIM_THRESHOLD, LLM_MODEL_ID, TOGETHER_API_KEY
-    • pip install together           (o tu proveedor LLM)
-"""
+# tools/query_libre.py  (versión 100 % web-augmented)
 
 from __future__ import annotations
 import re
 from typing import List
 
-from together import Together               # ↳  sustituye si usas otro LLM
-from langchain.text_splitter import RecursiveCharacterTextSplitter
+from together import Together
+from langchain_community.utilities import DuckDuckGoSearchAPIWrapper
+from langchain.memory import ConversationBufferMemory
 
-from vectorstore import law_search          # tu wrapper FAISS / Chroma
-from embed import get_embeddings
-from memory import memory
-from config import SIM_THRESHOLD, LLM_MODEL_ID, TOGETHER_API_KEY
+from config import LLM_MODEL_ID, TOGETHER_API_KEY
 
+# ───── Config ─────
+_CLIENT          = Together(api_key=TOGETHER_API_KEY)
+_MAX_TOKENS      = 512
+_HISTORY_TURNS   = 4        # nº de turnos previos
+_SEARCH_TOP_K    = 20        # líneas máximas a inyectar
+_DUCK            = DuckDuckGoSearchAPIWrapper()
 
-# ──────── Config local ────────────────────────────────────────────────────
-_CLIENT     = Together(api_key=TOGETHER_API_KEY)
-_EMB_LAW    = get_embeddings("laws")
-_SPLIT      = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=100)
-_MAX_TOKENS = 512
-_HISTORY_TURNS = 4            # nº de turnos previos a inyectar como contexto
+memory: ConversationBufferMemory = ConversationBufferMemory(return_messages=False)
 
+# ───── Helpers ─────
+def _normalize(txt: str) -> str:
+    return re.sub(r"[^A-Za-zÁ-Úá-úÜüÑñ ]+", "", txt).strip().lower()
 
-# ──────── Helper ─────────────────────────────────────────────────────────
-def _normalize(term: str) -> str:
-    """Quita caracteres no alfabéticos y normaliza a minúsculas."""
-    return re.sub(r"[^A-Za-zÁ-Úá-úÜüÑñ ]+", "", term).strip().lower()
+def _last_n_turns(buf: str, n: int) -> str:
+    lines = [l for l in buf.strip().split("\n") if l]
+    return "\n".join(lines[-n*2:])
 
+def _duck_snippets(q: str) -> str:
+    raw = _DUCK.run(f"{q} definición jurídica República Dominicana")
+    # primer corte por líneas
+    cuts = raw.split("\n")[:_SEARCH_TOP_K]
+    # segundo corte por longitud total
+    joined = "\n".join(cuts)
+    print(joined)
+    return joined
 
-# ──────── API pública ────────────────────────────────────────────────────
+# ───── Consulta libre ─────
 def query_libre_run(question: str,
-                      k: int = 6,
-                      temperature: float = 0.2) -> str:
+                    temperature: float = 0.0) -> str:
     """
-    Responde preguntas del tipo «¿Qué es la litispendencia?».
-
-    ▸ Si la definición ya se dio antes en esta conversación, se devuelve tal
-      cual (hace de mini-glosario en memoria).
-    ▸ Si no, recupera pasajes legales relevantes y consulta al LLM.
-    ▸ Retorna un texto fundamentado y cita artículos si están en el contexto.
+    Siempre realiza una búsqueda DuckDuckGo y usa el historial de
+    conversación para responder preguntas jurídicas breves.
     """
-    # 1) buscar en memoria cacheada
-    term_key = _normalize(question)
-    prev = memory.get(f"def:{term_key}")
-    if prev:
-        return prev
+    # 1) glosario
+    mem_vars  = memory.load_memory_variables({})
+    glossary  = mem_vars.get("definitions", {})
+    term_key  = _normalize(question)
 
-    # 2) recuperación de contexto legal
-    docs_scores = law_search.search_with_scores(question, k=k)
-    ctx_passages: List[str] = [
-        d.page_content for d, s in docs_scores if s < SIM_THRESHOLD
-    ]
-    context = "\n\n".join(ctx_passages) or "NO_MATCH"
+    # 2) historial y snippets web (siempre)
+    history_str  = _last_n_turns(memory.buffer, _HISTORY_TURNS)
+    web_snip     = _duck_snippets(question)
 
-    # 3) prompt dinámico para el LLM
-    history = memory.last_n_turns(_HISTORY_TURNS)
-
+    # 3) prompt
     system_prompt = (
         "Eres un abogado experto en derecho dominicano. "
-        "Responde preguntas jurídicas en lenguaje claro, cita normas "
-        "y evita repetir definiciones ya dadas previamente. "
-        "Si no existe respaldo legal sólido, reconoce esa limitación."
+        "Responde en un español claro y profesional, máximo 250 palabras. "
+        "Cita la base normativa si es conocida. "
+        "Si la información del fragmento web es insuficiente o dudosa, indícalo."
     )
 
     user_prompt = (
-        f"Historial reciente:\n{history}\n\n"
-        f"Pregunta actual: {question}\n\n"
-        f"Contexto legal recuperado:\n{context}\n\n"
-        "Instrucciones de formato:\n"
-        "• Comienza con una definición directa.\n"
-        "• Incluye al menos una cita normativa o jurisprudencial si procede.\n"
-        "• Sé conciso (máx. 250 palabras).\n"
-        "• Si el contexto = 'NO_MATCH', di explícitamente que no se encontró "
-        "soporte normativo suficiente.\n"
+        f"Historial reciente:\n{history_str}\n\n"
+        f"Pregunta del usuario: {question}\n\n"
+        f"Fuente web (DuckDuckGo):\n{web_snip}\n\n"
     )
 
+    # 4) LLM
     resp = _CLIENT.chat.completions.create(
         model       = LLM_MODEL_ID,
         messages    = [
             {"role": "system", "content": system_prompt},
-            {"role": "user",   "content": user_prompt}
+            {"role": "user",   "content": user_prompt},
         ],
         max_tokens  = _MAX_TOKENS,
-        temperature = temperature
+        temperature = temperature,
     ).choices[0].message.content.strip()
 
-    # 4) guardar en memoria para futuras consultas
-    memory.set(f"def:{term_key}", resp)
+    # 5) guardar en memoria
+    glossary[term_key] = resp
+    memory.save_context(
+        {"input": question},
+        {"output": resp, "definitions": glossary}
+    )
     return resp
 
-
+__all__ = ["query_libre_run", "memory"]
