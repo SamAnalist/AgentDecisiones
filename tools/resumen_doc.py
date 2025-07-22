@@ -113,12 +113,41 @@ def run(msg: str) -> str:
     content = "\n\n".join(chunks)
 
     # Prompt al LLM
-    prompt = (
-        "Eres un analista profesional de documentos judiciales. "
-        "Genera un resumen siguiendo este formato:\n"
-        "{resumen: \"\", considerandos: \"\", decision: \"\" }\n\n"
-        "Texto fuente:\n\n" + content
-    )
+    prompt = ( """
+Eres un analista experto en sentencias dominicanas.
+Lee el texto completo y construye un JSON en **una sola línea** usando estas claves
+(no incluyas comentarios ni saltos de línea extra):
+
+{
+  "datos_esenciales": {
+    "tribunal": "",          # Órgano que dicta la sentencia
+    "sala": "",              # Sala o cámara (si aplica)
+    "expediente": "",        # Núm. de expediente / NUC / IdDocumento
+    "asunto": "",            # Materia o naturaleza del caso
+    "fecha": ""              # Fecha (AAAA-MM-DD)
+  },
+  "partes": {
+    "demandantes": [         # Lista de personas o entidades actoras
+      { "nombre": "", "representantes": "" }
+    ],
+    "demandados": [          # Lista de personas o entidades demandadas
+      { "nombre": "", "representantes": "" }
+    ]
+  },
+  "pretensiones": [          # Peticiones principales (lista de strings)
+    ""
+  ],
+  "hechos_probados": "",     # 3-5 oraciones con hechos acreditados
+  "fundamentos": [           # Máx. 5 artículos, leyes o precedentes citados
+    ""
+  ],
+  "parte_dispositiva": "",   # Cómo falló el tribunal (condenas, montos, costas)
+  "puntos_clave": ""         # 2-3 frases que destaquen la relevancia
+}
+
+TEXTO SENTENCIA ↓↓↓
+"""
+        f"{content}")
 
     try:
         resp = client.chat.completions.create(
@@ -129,13 +158,35 @@ def run(msg: str) -> str:
             max_tokens=1500,
         )
         data = loads(resp.choices[0].message.content)
-        return (
-                "**Resumen general del caso:**\n" + _to_str(data.get("resumen", "")) + "\n\n"
-                                                                                       "**Considerandos:**\n" + _to_str(
-            data.get("considerandos", "")) + "\n\n"
-                                             "**Decisión final del juez:**\n" + _to_str(data.get("decision", ""))
+        dems = data["partes"]["demandantes"]
+        deds = data["partes"]["demandados"]
+
+        def list_partes(lst):
+            return "\n".join(
+                f"- **{p['nombre']}**  (repr.: {p['representantes']})" for p in lst if p["nombre"]
+            ) or "- —"
+
+        md = (
+                "### 1. Datos esenciales\n" +
+                "\n".join(f"- **{k.capitalize()}**: {v}" for k, v in data["datos_esenciales"].items() if v) +
+
+                "\n\n### 2. Partes\n**Demandantes:**\n" + list_partes(dems) +
+                "\n\n**Demandados:**\n" + list_partes(deds) +
+
+                "\n\n### 3. Pretensiones\n" +
+                "\n".join(f"1. {p}" for p in data["pretensiones"]) +
+
+                "\n\n### 4. Hechos probados\n" + data["hechos_probados"] +
+
+                "\n\n### 5. Fundamentos jurídicos\n" +
+                "\n".join(f"- {f}" for f in data["fundamentos"]) +
+
+                "\n\n### 6. Parte dispositiva\n" + data["parte_dispositiva"] +
+
+                "\n\n> **Puntos clave:** " + data["puntos_clave"]
         )
 
+        return md
 
     except JSONDecodeError:
         return "⚠️ Hubo un error al interpretar la respuesta del modelo."

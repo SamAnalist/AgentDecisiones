@@ -27,17 +27,21 @@ def get_embeddings(kind: str = "cases"):
 # ─────────────────────────────────────────────────────────────────
 # Helpers internos
 # ─────────────────────────────────────────────────────────────────
+# embed.py  (ajusta solo estas partes)
 
-def _batchify(texts: List[str], batch: int):
-    """Divide texts en lotes de tamaño *batch*."""
-    for i in range(0, len(texts), batch):
-        yield texts[i : i + batch]
+MAX_BATCH_SIZE = 64   # ←  número seguro para CPU y Windows
 
+def _batchify(texts: List[str], batch: int | None):
+    """Divide texts en lotes de tamaño *batch* (o todo si batch es None)."""
+    step = batch or len(texts)          # usa lista entera si batch==None
+    for i in range(0, len(texts), step):
+        yield texts[i : i + step]
 
-def _encode(texts: List[str], MAX_BATCH=None):
-    """Devuelve embeddings normalizados en batches secuenciales."""
+def _encode(texts: List[str], MAX_BATCH: int | None = None):
+    """Devuelve embeddings normalizados por lotes."""
+    batch_size = MAX_BATCH or MAX_BATCH_SIZE
     vectors = []
-    for chunk in _batchify(texts, MAX_BATCH):
+    for chunk in _batchify(texts, batch_size):
         vecs = _model.encode(
             chunk,
             normalize_embeddings=True,
@@ -45,6 +49,7 @@ def _encode(texts: List[str], MAX_BATCH=None):
         )
         vectors.extend(vecs)
     return [v.tolist() for v in vectors]
+
 
 
 # ─────────────────────────────────────────────────────────────────
