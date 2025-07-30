@@ -21,3 +21,7 @@ duckduckgo-search
 tqdm
 python-dateutil
 pyodbc
+pytesseract
+pillow
+pymupdf4llm
+langchain_experimental
