@@ -21,15 +21,30 @@ FILE_CONST   = DATA_DIR / "constitucion.csv"
 INDEX_CASES  = INDEX_DIR / "index_cases"
 INDEX_LAWS   = INDEX_DIR / "index_laws"
 
-# ───────── índice de SENTENCIAS ──────────────────────────────────
-df_cases = pd.read_excel(FILE_CASES)
-df_cases["textoPDF"] = df_cases["textoPDF"].fillna("")
-docs_cases = make_chunks(df_cases)
+print("🔧 Probando modelo de embeddings...")
+model = BNEEmbeddings()
+print("✅ Modelo de embeddings cargado")
 
-idx_cases = FAISS.from_documents(
-    docs_cases,
-    embedding=BNEEmbeddings(),          # RoBERTa-BNE
-    normalize_L2=True,
-)
-idx_cases.save_local(str(INDEX_CASES))
-print(f"✅ index_cases guardado ({len(docs_cases)} chunks)")
+if not FILE_CASES.exists():
+    print(f"❌ Archivo no encontrado: {FILE_CASES}")
+
+try:
+    print("🔧 Cargando archivo Excel...")
+    df_cases = pd.read_excel(FILE_CASES)
+    print("🔧 Generando chunks...")    
+    df_cases["textoPDF"] = df_cases["textoPDF"].fillna("")
+    docs_cases = make_chunks(df_cases)
+    print("G✅ chunks generados ({len(docs_cases)} chunks)")
+    idx_cases = FAISS.from_documents(
+        docs_cases,
+        embedding=model,          # RoBERTa-BNE
+        normalize_L2=True,
+    )
+    idx_cases.save_local(str(INDEX_CASES))
+    print(f"✅ index_cases guardado ({len(docs_cases)} chunks)")
+except Exception as e:
+    print(f"❌ index_cases no guardado: {e}")
+    pass
+
+# ───────── índice de SENTENCIAS ──────────────────────────────────
+
