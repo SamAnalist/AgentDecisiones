@@ -37,7 +37,9 @@ EXAMPLES = [
 {"role": "user", "content": "Dame la cronología completa del caso 034-2021-ECON-00366"},
 {"role": "assistant", "content": "cronologia"},
 {"role": "user", "content": "Cuantos casos cuyo fallo acoge en 2021?"},
-{"role": "assistant", "content": "estadistica"}
+{"role": "assistant", "content": "estadistica"},
+{"role": "user", "content": "Citame todos los actores del caso"},
+{"role": "assistant", "content": "consulta_doc"}
 ]
 SYSTEM_PROMPT = (
     "Eres un asistente jurídico que CLASIFICA la intención de una pregunta.\n"
