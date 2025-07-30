@@ -17,12 +17,23 @@
 # =========================================================
 from fastapi import FastAPI, HTTPException, status
 from pydantic import BaseModel
+from fastapi.middleware.cors import CORSMiddleware
+
+
 
 app = FastAPI(
     title="Sentencia QA API",
     version="1.2.0",
     docs_url="/docs",
     redoc_url="/redoc",
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 class QARequest(BaseModel):
@@ -37,9 +48,13 @@ async def health():
 
 @app.post("/qa", response_model=QAResponse, tags=["qa"])
 async def qa_endpoint(req: QARequest):
-    answer = responder_pregunta(req.question)
-    if answer.startswith("⚠️"):
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=answer)
+    answer = "No fue posible responder la pregunta. trate mas tarde..."
+    try:    
+        answer = responder_pregunta(req.question)
+        if answer.startswith("⚠️"):
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=answer)
+    except Exception as e:
+        logging.error(e)
     return {"answer": answer}
 
 # =========================================================
@@ -60,7 +75,6 @@ from vectorstore import search_by_text
 from tools.estadistica_ai import run as estadistica_ai_run
 from tools.query_libre import query_libre_run
 from tools.cronología import run as cronologia_run
-
 logger = logging.getLogger(__name__)
 
 TOOL_MAP = {
@@ -72,7 +86,7 @@ TOOL_MAP = {
     "borrador_alerta": alerta_run,
     "consulta_doc": consulta_run, # ← NUEVO label
     "consulta_concepto": query_libre_run,
-    "cronologia": cronologia_run
+    "cronologia": cronologia_run,
     #"auditoria_ley": auditoria_ley_run
 }
 
@@ -85,24 +99,32 @@ def auto_activate_if_id(text: str):
         _set_active(hit[0])
 
 def responder_pregunta(msg: str) -> str:
-    auto_activate_if_id(msg)
-    label = detect_intent(msg)
-    print(label)
-    logger.debug("Intento clasificado: %s", label)
-    if label == "desconocido" and resumen_tool._get_pending():
-        label = "resumen_doc"
-    if label == "desconocido":
-        if consulta_doc.active_doc:
-            return consulta_doc.run(msg)
-        return (
+    respuesta = ""
+    try:
+        auto_activate_if_id(msg)
+        label = detect_intent(msg)
+        print(label)
+        logger.debug("Intento clasificado: %s", label)
+        if label == "desconocido" and resumen_tool._get_pending():
+            label = "resumen_doc"
+        if label == "desconocido":
+            if consulta_doc.active_doc:
+                return consulta_doc.run(msg)
+            return (
+                "⚠️ No estoy seguro de si tu petición es de naturaleza judicial. "
+                "¿Podrías darme más detalles o reformular la pregunta?"
+            )
+
+        respuesta = TOOL_MAP[label](msg)
+        print(respuesta, label)
+        combined_input = f"[Intent: {label}] {msg}"
+        memory.save_context({"user": combined_input}, {"assistant": respuesta})
+    except Exception as e:
+        logger.exception("Error al procesar la pregunta")
+        respuesta = (
             "⚠️ No estoy seguro de si tu petición es de naturaleza judicial. "
             "¿Podrías darme más detalles o reformular la pregunta?"
         )
-
-    respuesta = TOOL_MAP[label](msg)
-    print(respuesta, label)
-    combined_input = f"[Intent: {label}] {msg}"
-    memory.save_context({"user": combined_input}, {"assistant": respuesta})
     return respuesta
 
 # =========================================================
@@ -126,7 +148,7 @@ LABELS = (
     "consulta_concepto",
     "borrador_alerta",
     "cronologia",
-    "auditoria_ley",
+    #"auditoria_ley",
     "desconocido",
 )
 
