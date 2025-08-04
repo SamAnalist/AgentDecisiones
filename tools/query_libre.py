@@ -1,88 +1,133 @@
-# tools/query_libre.py  (versión 100 % web-augmented)
-
+# tools/query_libre.py  — v2025-07-30
 from __future__ import annotations
-import re
-from typing import List
+import re, json
+from pathlib import Path
+from typing import List, Optional
 
 from together import Together
 from langchain_community.utilities import DuckDuckGoSearchAPIWrapper
 from langchain.memory import ConversationBufferMemory
 
-from config import LLM_MODEL_ID, TOGETHER_API_KEY
+from config import DATA_DIR, LLM_MODEL_ID, TOGETHER_API_KEY
+from vectorstore import law_search                           # ← ya carga index_laws
 
-# ───── Config ─────
+# ──────────────── LLM & search wrappers ───────────────────
 _CLIENT          = Together(api_key=TOGETHER_API_KEY)
-_MAX_TOKENS      = 512
-_HISTORY_TURNS   = 4        # nº de turnos previos
-_SEARCH_TOP_K    = 20        # líneas máximas a inyectar
 _DUCK            = DuckDuckGoSearchAPIWrapper()
+
+_MAX_TOKENS      = 512
+_HISTORY_TURNS   = 4
+_SEARCH_TOP_K    = 20
+_CRIT_TOP_K      = 5
 
 memory: ConversationBufferMemory = ConversationBufferMemory(return_messages=False)
 
-# ───── Helpers ─────
-def _normalize(txt: str) -> str:
-    return re.sub(r"[^A-Za-zÁ-Úá-úÜüÑñ ]+", "", txt).strip().lower()
+# ──────────────── Carga Constitución en dict ──────────────
+CONST_PATH = Path(DATA_DIR) / "constitucion.csv"
+_const_map: dict[int, str] = {}
+if CONST_PATH.exists():
+    import pandas as pd
+    df_const = pd.read_csv(CONST_PATH)
+    for _, row in df_const.iterrows():
+        try:
+            _const_map[int(row["ArticuloNo"])] = str(row["ArticuloContenido"]).strip()
+        except (ValueError, KeyError):
+            continue  # skip malformed rows
 
-def _last_n_turns(buf: str, n: int) -> str:
-    lines = [l for l in buf.strip().split("\n") if l]
-    return "\n".join(lines[-n*2:])
+
+# ──────────────── Helpers generales ──────────────────────
+_ART_RX = re.compile(
+    r"""art[ií]culo\s+        # palabra artículo
+        (?P<num>\d{1,3})      # número (1-3 dígitos)
+        (?:\s*(?:de|del)?\s*
+        (?:la\s+)?constituci[oó]n)   # opcional "de la constitución"
+    """, re.I | re.X,
+)
+
+def _extract_articulo_num(q: str) -> Optional[int]:
+    m = _ART_RX.search(q.lower())
+    if m:
+        try:
+            return int(m.group("num"))
+        except ValueError:
+            return None
+    return None
 
 def _duck_snippets(q: str) -> str:
-    raw = _DUCK.run(f"{q} definición jurídica República Dominicana")
-    # primer corte por líneas
-    cuts = raw.split("\n")[:_SEARCH_TOP_K]
-    # segundo corte por longitud total
-    joined = "\n".join(cuts)
-    print(joined)
-    return joined
+    raw   = _DUCK.run(f"{q} República Dominicana derecho")
+    return "\n".join(raw.split("\n")[:_SEARCH_TOP_K])
 
-# ───── Consulta libre ─────
+def _legal_snippets(q: str, k: int = _CRIT_TOP_K) -> str:
+    hits = law_search(q, k=k) or []
+    partes: List[str] = []
+    for d in hits:
+        src = d.metadata.get("fuente")
+        tag = f"Art. {d.metadata.get('articulo')}" if src == "constitucion" \
+              else f"Criterio {d.metadata.get('ID')}"
+        partes.append(f"[{tag}] {d.page_content[:180]}…")
+    return "\n".join(partes) if partes else "—"
+
+def _last_turns(hist: str, n: int) -> str:
+    lines = [l for l in hist.strip().split("\n") if l]
+    return "\n".join(lines[-n * 2:])           # user+assistant ≈ 2 líneas/t
+
+# ──────────────── Respuesta directa de la Constitución ───
+def _answer_constitution(article_num: int) -> str:
+    texto = _const_map.get(article_num)
+    if not texto:
+        return ""
+    return (
+        f"**Artículo {article_num} — Constitución de la República Dominicana**\n\n"
+        f"{texto}\n\n"
+        "_Fuente: Constitución (G.O. 10805-10-06-2015)._"
+    )
+
+# ──────────────── Entrada principal ──────────────────────
 def query_libre_run(question: str,
                     temperature: float = 0.0) -> str:
-    """
-    Siempre realiza una búsqueda DuckDuckGo y usa el historial de
-    conversación para responder preguntas jurídicas breves.
-    """
-    # 1) glosario
-    mem_vars  = memory.load_memory_variables({})
-    glossary  = mem_vars.get("definitions", {})
-    term_key  = _normalize(question)
+    # 0) ¿Pregunta directa a la Constitución?
+    art_num = _extract_articulo_num(question)
+    if art_num is not None:
+        respuesta = _answer_constitution(art_num)
+        if respuesta:
+            # guarda en memoria y devuelve
+            memory.save_context({"input": question}, {"output": respuesta})
+            return respuesta
 
-    # 2) historial y snippets web (siempre)
-    history_str  = _last_n_turns(memory.buffer, _HISTORY_TURNS)
-    web_snip     = _duck_snippets(question)
+    # 1) Historial reciente
+    hist_str = _last_turns(memory.buffer, _HISTORY_TURNS)
 
-    # 3) prompt
-    system_prompt = (
-        "Eres un abogado experto en derecho dominicano. "
-        "Responde en un español claro y profesional, máximo 250 palabras. "
-        "Cita la base normativa si es conocida. "
-        "Si la información del fragmento web es insuficiente o dudosa, indícalo."
+    # 2) Snippets externos
+    web_snips   = _duck_snippets(question)
+    leyes_snips = _legal_snippets(question)
+
+    # 3) Prompt al LLM
+    system = (
+        "Eres un jurista experto en derecho dominicano. "
+        "Responde con rigor y brevedad (≤250 palabras). "
+        "Cuando cites normas, indica su número de artículo "
+        "o identificador de criterio."
     )
+    user = json.dumps({
+        "historial": hist_str,
+        "pregunta": question,
+        "web": web_snips,
+        "base_normativa": leyes_snips,
+    }, ensure_ascii=False, indent=2)
 
-    user_prompt = (
-        f"Historial reciente:\n{history_str}\n\n"
-        f"Pregunta del usuario: {question}\n\n"
-        f"Fuente web (DuckDuckGo):\n{web_snip}\n\n"
-    )
-
-    # 4) LLM
-    resp = _CLIENT.chat.completions.create(
+    respuesta = _CLIENT.chat.completions.create(
         model       = LLM_MODEL_ID,
         messages    = [
-            {"role": "system", "content": system_prompt},
-            {"role": "user",   "content": user_prompt},
+            {"role": "system", "content": system},
+            {"role": "user",   "content": user},
         ],
         max_tokens  = _MAX_TOKENS,
         temperature = temperature,
     ).choices[0].message.content.strip()
 
-    # 5) guardar en memoria
-    glossary[term_key] = resp
-    memory.save_context(
-        {"input": question},
-        {"output": resp, "definitions": glossary}
-    )
-    return resp
+    # 4) Persistir memoria
+    memory.save_context({"input": question}, {"output": respuesta})
+    return respuesta
+
 
 __all__ = ["query_libre_run", "memory"]

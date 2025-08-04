@@ -54,12 +54,9 @@ from tools.estadistica import run as estadistica_run
 from tools.comparar import run as comparar_run
 from tools.borrador_alerta import run as alerta_run
 from tools.consulta_doc import run as consulta_run, _set_active, extract_identifier
-#from tools.auditoria_ley import run as auditoria_ley_run
+from tools.auditoria_ley import run as auditoria_ley_run
 from tools.query_libre import query_libre_run
 from vectorstore import search_by_text
-from tools.estadistica_ai import run as estadistica_ai_run
-from tools.query_libre import query_libre_run
-from tools.cronología import run as cronologia_run
 
 logger = logging.getLogger(__name__)
 
@@ -67,13 +64,11 @@ TOOL_MAP = {
     "expediente": expediente_run,
     "resumen_doc": resumen_run,
     "estadistica": estadistica_run,
-    "estadistica_ai": estadistica_ai_run,
     "comparar_juris": comparar_run,
     "borrador_alerta": alerta_run,
-    "consulta_doc": consulta_run, # ← NUEVO label
-    "consulta_concepto": query_libre_run,
-    "cronologia": cronologia_run
-    #"auditoria_ley": auditoria_ley_run
+    "consulta_doc": consulta_run,
+    "consulta_concepto":query_libre_run,
+    "auditoria_ley": auditoria_ley_run,
 }
 
 def auto_activate_if_id(text: str):
@@ -89,8 +84,7 @@ def responder_pregunta(msg: str) -> str:
     label = detect_intent(msg)
     print(label)
     logger.debug("Intento clasificado: %s", label)
-    if label == "desconocido" and resumen_tool._get_pending():
-        label = "resumen_doc"
+
     if label == "desconocido":
         if consulta_doc.active_doc:
             return consulta_doc.run(msg)
@@ -119,14 +113,12 @@ logger = logging.getLogger(__name__)
 LABELS = (
     "expediente",
     "resumen_doc",
-    "consulta_doc",   # ← NUEVO label
+    "consulta_doc",
     "estadistica",
-    "estadistica_ai",
     "comparar_juris",
-    "consulta_concepto",
     "borrador_alerta",
-    "cronologia",
     "auditoria_ley",
+    "consulta_concepto",
     "desconocido",
 )
 

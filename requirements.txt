@@ -16,8 +16,11 @@ numpy
 whoosh
 #pip install -U langchain-huggingface
 duckduckgo-search
+networkx
 #pip install -U "sentence-transformers>=2.7" faiss-cpu accelerate
 #pip install -U langchain langchain-experimental
 tqdm
 python-dateutil
 pyodbc
+lexnlp        # motor de extracción jurídica               # reglas castellanas para LexNLP
+spacy                   # Blackstone usa spaCy (futuro)

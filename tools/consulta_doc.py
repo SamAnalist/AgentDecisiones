@@ -1,13 +1,16 @@
-# tools/consulta_doc.py  — QA multi-llamada sobre la sentencia ACTIVA
+# tools/consulta_doc.py  — QA multi-llamada sobre la sentencia ACTIVA + LEYES
 """
-• Usa exactamente los mismos chunks que resumen_doc (cargados desde /chunks/*.json)
-• Si el contexto supera MAX_CHARS_PER_CALL, lo divide en varios requests
+• Sigue usando los mismos chunks de la sentencia que resumen_doc (DATA_DIR/chunks/*.json).
+• Si el usuario pregunta algo y ya hay un documento activo, ahora también
+  se consultan los artículos constitucionales y criterios jurisprudenciales
+  embebidos en index_dir/index_laws.
 
-Este módulo se ha simplificado para **eliminar cualquier dependencia de Streamlit**.  Ahora la
-única memoria de trabajo es la variable de módulo `active_doc`.  Si necesitas
-persistencia entre peticiones, gestiona el identificador de sentencia a nivel de
-llamada (por ejemplo, almacenándolo en la base de datos o en un token de
-sesión) y pásalo explícitamente a tu lógica.
+Flujo:
+1. Si el mensaje contiene un identificador (NUC, IdDocumento, etc.) se activa.
+2. Se arma CONTEXTO_SENTENCIA con todos los chunks del caso activo.
+3. Se buscan hasta 5 leyes/criterios relevantes al mensaje → CONTEXTO_LEYES.
+4. Se pregunta al LLM con ambos contextos. El sistema debe priorizar la
+   sentencia; sólo complementa con leyes/criterios si son pertinentes.
 """
 
 from __future__ import annotations
@@ -16,13 +19,13 @@ from typing import Optional
 
 from together import Together
 from config import TOGETHER_API_KEY, LLM_MODEL_ID, DATA_DIR
-from memory import memory
+from vectorstore import law_search                       # ← NEW
+from memory import memory as _memory                     # para save_context
 
 # ───────────────────────── LLM ──────────────────────────
 _client = Together(api_key=TOGETHER_API_KEY)
 
 # ─────────────── Estado en memoria ─────────────────────
-# El documento activo se mantiene sólo en memoria de proceso.
 active_doc: Optional[dict] = None
 
 # ────────────── CARGA DE CHUNKS (idéntico a resumen_doc) ──────────────
@@ -38,13 +41,8 @@ for fname in os.listdir(CHUNKS_DIR):
     md   = entry.get("metadata", {})
     text = entry.get("text", "")
 
-    keys = [
-        str(md.get("NUC", "")),
-        str(md.get("NumeroTramite", "")),
-        str(md.get("DocumentID", "")),
-    ]
-    for k in keys:
-        k_norm = k.lower().lstrip("auto:").strip()
+    for key in ("NUC", "NumeroTramite", "DocumentID"):
+        k_norm = str(md.get(key, "")).lower().lstrip("auto:").strip()
         if k_norm:
             docs_map.setdefault(k_norm, []).append(text)
 
@@ -64,27 +62,21 @@ def extract_identifier(text: str) -> Optional[str]:
     return m.group(1) if m else None
 
 def _doc_id(doc) -> Optional[str]:
-    # 1) Si viene como dict plano
-    if isinstance(doc, dict):
-        for key in ("NUC", "NumeroTramite", "DocumentID"):
-            if doc.get(key):
-                return str(doc[key]).lower().lstrip("auto:").strip()
-    # 2) Si es un objeto con .metadata
-    meta = getattr(doc, "metadata", {}) or {}
     for key in ("NUC", "NumeroTramite", "DocumentID", "doc_id", "case_number"):
-        if meta.get(key):
-            return str(meta[key]).lower().lstrip("auto:").strip()
+        if isinstance(doc, dict) and doc.get(key):
+            return str(doc[key]).lower().lstrip("auto:").strip()
+        if not isinstance(doc, dict):
+            meta = getattr(doc, "metadata", {}) or {}
+            if meta.get(key):
+                return str(meta[key]).lower().lstrip("auto:").strip()
     return None
 
-
 def _set_active(doc):
-    """Define el documento activo en memoria."""
     global active_doc
     active_doc = doc
 
-
-# ────────────── QA multi-llamada (divide si es demasiado largo) ───────
-MAX_CHARS_PER_CALL = 100_000             # ≈ 25 000 tokens
+# ────────────── QA helpers ────────────────────────────────────────────
+MAX_CHARS_PER_CALL = 100_000             # ≈ 25 000 tokens
 
 def _split_by_size(text: str, max_chars: int):
     pos = 0
@@ -108,18 +100,21 @@ def _ask_llm(system: str, user: str, max_tok: int = 768) -> str:
 
 def _qa_part(context: str, question: str) -> str:
     sys = (
-        "Eres un asistente jurídico experto en jurisprudencia dominicana. "
-        "Responde SOLO con la información en CONTEXTO. "
-        "Si falta, di: 'No hay información suficiente en la sentencia'."
+        "Eres un asistente jurídico experto en jurisprudencia dominicana.\n"
+        "Responde PRIORITARIAMENTE con la información de CONTEXTO_SENTENCIA.\n"
+        "Únicamente complementa con CONTEXTO_LEYES si aporta artículos o "
+        "criterios explícitos que respalden la respuesta.\n"
+        "Si la información no está disponible, responde: "
+        "'No hay información suficiente en la sentencia'."
     )
-    usr = f"CONTEXTO:\n{context}\n\nPREGUNTA:\n{question}"
+    usr = f"{context}\n\nPREGUNTA:\n{question}"
     return _ask_llm(sys, usr)
 
 def _qa_multi(context_full: str, question: str) -> str:
     if len(context_full) <= MAX_CHARS_PER_CALL:
         return _qa_part(context_full, question)
 
-    answers: list[str] = []
+    answers = []
     for chunk in _split_by_size(context_full, MAX_CHARS_PER_CALL):
         answers.append(_qa_part(chunk, question))
 
@@ -128,26 +123,32 @@ def _qa_multi(context_full: str, question: str) -> str:
     ))
     return merged or "No hay información suficiente en la sentencia."
 
-# ────────────── build context (TODOS los chunks) ──────────────────────
+# ────────────── build contexts ────────────────────────────────────────
+def _build_context_sentencia(doc_id_norm: str) -> str:
+    return "\n\n".join(docs_map.get(doc_id_norm, []))
 
-def _build_context(doc_id_norm: str) -> str:
-    chunks = docs_map.get(doc_id_norm, [])
-    return "\n\n".join(chunks)
+def _build_context_leyes(pregunta: str) -> str:
+    hits = law_search(pregunta, k=5)
+    if not hits:
+        return ""
+    bloques = []
+    for d in hits:
+        fuente = d.metadata.get("fuente")
+        if fuente == "constitucion":
+            titulo = f"[Art. {d.metadata.get('articulo')}]"
+        else:
+            titulo = f"[Criterio {d.metadata.get('ID')}]"
+        bloques.append(f"{titulo} {d.page_content}…")
+    return "\n\n".join(bloques)
 
-# ────────────── API principal ─────────────────────────────────────────
-
-def run(user_msg: str) -> str:
-    """Ejecuta la consulta sobre la sentencia activa o la que indique el usuario."""
+# ─────────── API principal ─────────────────────────────
+def run(user_msg: str, memory=None) -> str:
     global active_doc
 
     ident = extract_identifier(user_msg)
     if ident:
-        ident_norm = ident.lower().strip()
-        _set_active({
-            "NUC": ident_norm,
-            "NumeroTramite": ident_norm,
-            "DocumentID": ident_norm,
-        })
+        ident_n = ident.lower().strip()
+        _set_active({"NUC": ident_n, "NumeroTramite": ident_n, "DocumentID": ident_n})
 
     if not active_doc:
         return "⚠️ No hay ninguna sentencia activa. Indica el número de caso."
@@ -156,10 +157,19 @@ def run(user_msg: str) -> str:
     if not did:
         return "⚠️ La sentencia activa no tiene identificador reconocible."
 
-    context = _build_context(did)
-    if not context:
+    ctx_sent = _build_context_sentencia(did)
+    if not ctx_sent:
         return "⚠️ Texto de la sentencia no encontrado en memoria."
 
-    answer = _qa_multi(context, user_msg)
-    memory.save_context({"user": user_msg}, {"assistant": answer})
+    ctx_leyes = _build_context_leyes(user_msg)
+    contexto_completo = (
+        "===== CONTEXTO_SENTENCIA =====\n" + ctx_sent +
+        "\n\n===== CONTEXTO_LEYES =====\n" + (ctx_leyes or "—")
+    )
+
+    answer = _qa_multi(contexto_completo, user_msg)
+
+    if memory is not None:
+        _memory.save_context({"user": user_msg}, {"assistant": answer})
+
     return answer

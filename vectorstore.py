@@ -47,3 +47,11 @@ def search_by_vector(vec, k: int = 5, filtro: dict | None = None):
 #     if not lawdb:
 #         return []
 #     return lawdb.similarity_search(text, k=k)
+lawdb = FAISS.load_local(
+    str(INDEX_DIR / "index_laws"),
+    embeddings=get_embeddings("laws"),
+    allow_dangerous_deserialization=True,
+)
+
+def law_search(text: str, k: int = 5, filtro: dict | None = None):
+    return lawdb.similarity_search(text, k=k, filter=filtro)
