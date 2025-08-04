@@ -47,10 +47,10 @@ pytesseract.pytesseract.tesseract_cmd = TESSERACT_CMD  # línea clave
 # Configuración de conexión
 conn = pyodbc.connect(
     "DRIVER={ODBC Driver 17 for SQL Server};"
-    "SERVER=192.168.0.133;"
-    "DATABASE=DepositoDocumentos;"
-    r"Trusted_Connection=yes;"         # << clave
-    r"TrustServerCertificate=yes;")
+    "SERVER=127.0.0.1,1433;"
+    "DATABASE=Documentos;"
+    "UID=langflow_agent;"
+    "PWD=12345678;")
 cursor = conn.cursor()
 def extract_text_from_pdf_bytes(pdf_bytes: bytes) -> str:
     doc = fitz.open(stream=pdf_bytes, filetype="pdf")
@@ -99,4 +99,4 @@ ORDER BY d.FechaCreacion
     df["texto_pdf"] = texto_pdf
     return df
 
-print(colectar_texto(nuc="034-2021-ECON-00366"))
+#print(colectar_texto(nuc="034-2021-ECON-00366"))

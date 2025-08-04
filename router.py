@@ -13,7 +13,7 @@ LABELS = (
     "consulta_concepto",
     "borrador_alerta",
     "cronologia",
-    "auditoria_ley",
+    #"auditoria_ley",
     "desconocido",
 )
 
@@ -61,8 +61,8 @@ SYSTEM_PROMPT = (
     "  búsqueda semántica en los **embeddings** de textoPDF.\n"
     "- comparar_juris → busca precedentes o casos similares\n"
     "- borrador_alerta → plazos, vencimientos, alertas procesales\n"
-    "• auditoria_ley      –  solicita verificar artículos citados/omitidos o "
-    "                        auditar un borrador de fallo frente al corpus legal\n"
+    #"• auditoria_ley      –  solicita verificar artículos citados/omitidos o "
+    #"                        auditar un borrador de fallo frente al corpus legal\n"
     "- consulta_concepto → definiciones y aclaraciones jurídicas puntuales.\n"
     "- desconocido → todo lo demás\n"
     "Devuelve solo la etiqueta, sin explicaciones."
@@ -75,7 +75,7 @@ def detect_intent(msg: str) -> Literal[
     "estadistica",
     "comparar_juris",
     "consulta_concepto",
-    "auditoria_ley",
+    #"auditoria_ley",
     "borrador_alerta",
     "cronologia",
     "desconocido"
