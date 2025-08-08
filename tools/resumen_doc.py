@@ -71,7 +71,6 @@ def run(msg: str) -> str:
 
     key_norm = key.lower().lstrip("auto:").strip()
     print(f"DEBUG: clave extraída → '{key_norm}'")           # ← trazador
-
     # — Búsqueda exacta —
     chunks = docs_map.get(key_norm)
     if chunks:
@@ -111,9 +110,14 @@ def run(msg: str) -> str:
 
     # Concatenar todos los chunks chunks
     content = "\n\n".join(chunks)
+    from memory import memory
+    history = memory.load_memory_variables({})
 
     # Prompt al LLM
-    prompt = ( """
+    prompt = (
+
+        """
+
 Eres un analista experto en sentencias dominicanas.
 Lee el texto completo y construye un JSON en **una sola línea** usando estas claves
 (no incluyas comentarios ni saltos de línea extra):
@@ -148,6 +152,7 @@ Lee el texto completo y construye un JSON en **una sola línea** usando estas cl
 TEXTO SENTENCIA ↓↓↓
 """
         f"{content}")
+
 
     try:
         resp = client.chat.completions.create(

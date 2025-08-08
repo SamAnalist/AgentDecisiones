@@ -20,7 +20,7 @@ from typing import Optional
 from together import Together
 from config import TOGETHER_API_KEY, LLM_MODEL_ID, DATA_DIR
 from vectorstore import law_search                       # ← NEW
-from memory import memory as _memory                     # para save_context
+from memory import memory                      # para save_context
 
 # ───────────────────────── LLM ──────────────────────────
 _client = Together(api_key=TOGETHER_API_KEY)
@@ -49,10 +49,7 @@ for fname in os.listdir(CHUNKS_DIR):
 # ────────────── ID helpers ────────────────────────────────────────────
 ID_PATTERN = re.compile(
     r"""(
-        \b\d{3}-\d{4}-[A-Z]+-\d{5}\b      # 034-2020-ECON-00096
-      | \b\d{3}-\d{4}-[A-Z]+-\d{3,}\b     # 533-2020-ECON-00751
-      | SCJ[-/]\w+[-/]\d{4}[-/]\d+        # SCJ-TS-2023-1234
-      | \b\d{4}-\d{1,5}\b                 # 2023-123
+       r"(?:\b\d{3}-\d{4}-[A-Z]{4}-\d{5}\b|\d{6,}|pdf@[0-9a-f]{8})"               # 2023-123
     )""",
     re.VERBOSE | re.IGNORECASE,
 )
@@ -142,10 +139,13 @@ def _build_context_leyes(pregunta: str) -> str:
     return "\n\n".join(bloques)
 
 # ─────────── API principal ─────────────────────────────
-def run(user_msg: str, memory=None) -> str:
+def run(user_msg: str) -> str:
     global active_doc
-
-    ident = extract_identifier(user_msg)
+    try:
+        from agent import history
+    except:
+        history = memory.load_memory_variables({})
+    ident = extract_identifier(user_msg) or extract_identifier(str(history))
     if ident:
         ident_n = ident.lower().strip()
         _set_active({"NUC": ident_n, "NumeroTramite": ident_n, "DocumentID": ident_n})
@@ -169,7 +169,5 @@ def run(user_msg: str, memory=None) -> str:
 
     answer = _qa_multi(contexto_completo, user_msg)
 
-    if memory is not None:
-        _memory.save_context({"user": user_msg}, {"assistant": answer})
 
     return answer

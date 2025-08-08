@@ -117,15 +117,15 @@ def run(msg: str) -> str:
 
     # 2. Recuperar artículos constitucionales y criterios
     legal_hits = law_search(msg, k=8)
-    leyes      = [d for d in legal_hits if d.metadata.get("fuente") == "constitucion"][:3]
-    criterios  = [d for d in legal_hits if d.metadata.get("fuente") == "criterio"][:3]
+    leyes      = [d for d in legal_hits if d.metadata.get("fuente") == "constitucion"]
+    criterios  = [d for d in legal_hits if d.metadata.get("fuente") == "criterio"]
 
     ctx_leyes = "\n".join(
-        f"[Art. {l.metadata.get('articulo')}] {l.page_content[:180]}…" for l in leyes
+        f"[Art. {l.metadata.get('articulo')}] {l.page_content}" for l in leyes
     ) or "—"
 
     ctx_criterios = "\n".join(
-        f"[ID {c.metadata.get('ID')}] {c.page_content[:180]}…" for c in criterios
+        f"[ID {c.metadata.get('ID')}] {c.page_content}" for c in criterios
     ) or "—"
 
     # 3. Construir prompt
