@@ -127,7 +127,8 @@ def run(
             {"role": "system", "content": system},
             {"role": "user",   "content": user},
         ],
-        temperature=0.2,
+        temperature=0.0,
+        top_k=0, top_p=1,
         max_tokens=1400,
     )
     return rsp.choices[0].message.content.strip()

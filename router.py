@@ -12,7 +12,7 @@ LABELS = (
     "relacionar_juris",
     "comparar_ids",          # ← NUEVO
     "consulta_concepto",
-    "borrador_alerta",
+    #"borrador_alerta",
     "cronologia",
     "auditoria_ley",
     "conversacional",
@@ -88,33 +88,51 @@ EXAMPLES = [
 
 ]
 SYSTEM_PROMPT = (
-    "Eres un asistente jurídico que CLASIFICA la intención de una pregunta. Además, la pregunta debe ser de indole judicial/legal o refiriendose a documentos y leyes.\n"
-    "Las preguntas pueden referirse a:\n"
-    "• El **DataFrame** principal de contexto y de donde el usuario hará preguntas que tiene columnas: "
-    "  ['NUC', 'NumeroTramite', 'IdDocumento', 'Sala', 'Tribunal', "
-    "   'Materia', 'TipoFallo', 'FechaDecision', 'textoPDF', ...]\n"
-    "• Sentencias activas (texto completo en memoria)\n\n"
-    "Devuelve SOLO UNA de estas etiquetas:\n"
-    "- expediente → El usuario consulta un expediente sobre un caso con un identificador\n"
-    "- resumen_doc → El usuario pide explicitamente un resumen de un documento citado por id o si mencionan algo parecido a: *todo* o *solo la sentencia final*\n"
-    "- consulta_doc → pregunta detalles del documento activo\n"
-    "- cronologia → solicita la línea de tiempo completa de un caso (NUC)\n"      # ← NUEVO
-    "- estadistica → *la métrica se puede calcular SOLO con columnas "
-    "  explícitas del DataFrame* (ej.: '¿cuántos fallos en 2023?', "
-    "  'promedio de indemnización en Materia = Laboral')\n"
-    "- estadistica_ai → pide conteo/estadística que requieren busqueda semantica del concepto dentro del texto."
-    "  'porcentaje de demandas contra EDESUR'.  Estas consultas requieren "
-    "  búsqueda semántica en los **embeddings** de textoPDF.\n"
-    "- relacionar_juris → Pide un veredicto recomendado o se refiere a describe un caso pidiendo recomendación de fallo.\n"
-    "- borrador_alerta → plazos, vencimientos, alertas procesales\n"
-    "- auditoria_ley      –  solicita verificar artículos citados/omitidos o "
-    "                        auditar un borrador de fallo frente al corpus legal\n"
-    "- consulta_concepto → definiciones y aclaraciones jurídicas puntuales.\n"
-    "- conversacional    **Cualquier pregunta que no aplique para otro query** (preguntas abiertas, pedidos de diferentes casos, etc.)\n\n"
-     "- comparar_ids   → compara dos sentencias de la BD dadas por sus IDs\n"
-    "Devuelve solo la etiqueta, sin explicaciones."
-)
+    # ------------------------------------------------------------------
+    #  R O U T I N G   P R O M P T   –   Llama-4-Maverick
+    # ------------------------------------------------------------------
+"""    Instrucciones generales
+    1) Lee la consulta del usuario.
+    2) Elige **exactamente una** etiqueta de la lista ⬇️ que mejor describa
+       la intención principal.  No devuelvas nada más que la etiqueta.
+    3) Si dudás entre dos, elige la más específica.
+    4) Usa siempre minúsculas, sin espacios adicionales, sin tildes
+       ni puntuación extra.
 
+    Contexto del dominio
+    • Todas las consultas se refieren al ámbito jurídico dominicano
+      (sentencias, leyes, jurisprudencia, plazos procesales, etc.).
+    • El DataFrame principal contiene columnas:
+      ['NUC','NumeroTramite','IdDocumento','Sala','Tribunal','Materia',
+       'TipoFallo','FechaDecision','textoPDF', …]
+    • Puede haber uno o varios *documentos activos* en memoria
+      (texto completo de sentencias o escritos).
+
+    Etiquetas posibles
+    ──────────────────────────────────────────────────────────────
+      conversacional   → Preguntas de charla general o que no encajan
+                         en ninguna otra categoría.
+      expediente       → Consulta por un expediente o caso específico
+                         identificado (NUC, número de trámite, etc.).
+      resumen_doc      → Petición explícita de un resumen de un documento
+                         concreto (por ID o «solo la sentencia final», «todo»).
+      consulta_doc     → Preguntas de detalle sobre el documento activo
+                         (partes, argumentos, firmas, etc.).
+      cronologia       → Solicita la línea de tiempo completa de un caso.
+      estadistica      → Métricas calculables solo con las columnas DEL
+                         DataFrame (ej. «¿cuántos fallos en 2023?»).
+      estadistica_ai   → Estadísticas que requieren búsqueda semántica
+                         en textoPDF (ej. «% de demandas contra EDESUR»).
+      relacionar_juris → Explicación de un caso/expediente para obtener
+                         recomendación de veredicto o jurisprudencia afín.
+      auditoria_ley    → Verificar artículos citados/omitidos o auditar un
+                         borrador de sentencia frente al corpus legal.
+      consulta_concepto→ Definiciones o aclaraciones jurídicas puntuales.
+      comparar_ids     → Comparar dos o más sentencias de la BD por sus IDs.
+    IMPORTANTE: Devuelve ÚNICAMENTE la etiqueta seleccionada. Prioriza la etiqueta conversacional."""
+
+)
+import math
 def detect_intent(msg: str) -> Literal[
     "expediente",
     "resumen_doc",
@@ -128,14 +146,24 @@ def detect_intent(msg: str) -> Literal[
     "cronologia",
     "conversacional"
 ]:
-    response = client.chat.completions.create(
+    resp = client.chat.completions.create(
         model=LLM_MODEL_ID,
-        messages=[{"role": "system", "content": SYSTEM_PROMPT}, *EXAMPLES,
-                  {"role": "user", "content": msg}],
+        messages=[
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "user", "content": msg},
+        ],
         temperature=0.0,
+        # Devuelve logprobs para la primera palabra — la etiqueta
+        logprobs=True, top_logprobs=5, max_tokens=10,
     )
-    label = response.choices[0].message.content.strip().lower()
-    #print("Ve aqui lo que recibe y envia el router: ",msg,"", label)
-    if label in LABELS:
-        return label
-    return "conversacional"
+
+    label = resp.choices[0].message.content.strip().lower()
+    logprob = resp.choices[0].logprobs.token_logprobs[0]
+    print(resp, logprob)
+    # ≈ log p(label)
+    confidence = math.exp(logprob)  # 0-1
+
+    # umbral: si la probabilidad es < 35 % → conversacional
+    if confidence < 0.1 or label not in LABELS:
+        return "conversacional"
+    return label

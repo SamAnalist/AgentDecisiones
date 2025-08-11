@@ -107,18 +107,17 @@ def responder_pregunta(
     label = detect_intent(question)
     logger.debug("Intento clasificado: %s", label)
 
-    if label == "conversacional":
-        if consulta_doc.active_doc:
-            return consulta_doc.run(question)
-        try:
-            conversacional_run(question)
-        except:
-            return (
-            "⚠️ No estoy seguro de si tu petición es de naturaleza judicial. "
-            "¿Podrías darme más detalles o reformular la pregunta?"
-        )
-    msg = f"{question}\n\nHistorial de conversaciones:\n{history}"
-
+    # if label == "conversacional":
+    #     if consulta_doc.active_doc:
+    #         return consulta_doc.run(question)
+    #     try:
+    #         conversacional_run(question)
+    #     except:
+    #         return (
+    #         "⚠️ No estoy seguro de si tu petición es de naturaleza judicial. "
+    #         "¿Podrías darme más detalles o reformular la pregunta?"
+    #     )
+    msg = f"{question}\n\nHistorial de conversaciones:\n{history}" if label != "relacionar_juris" or label != "comparar_ids" else question
     # 3) Llama a la tool
     respuesta = TOOL_MAP[label](msg)
     # 5) Guardar en memoria de conversación

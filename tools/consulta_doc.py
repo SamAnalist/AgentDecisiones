@@ -48,15 +48,17 @@ for fname in os.listdir(CHUNKS_DIR):
 
 # ────────────── ID helpers ────────────────────────────────────────────
 ID_PATTERN = re.compile(
-    r"""(
-       r"(?:\b\d{3}-\d{4}-[A-Z]{4}-\d{5}\b|\d{6,}|pdf@[0-9a-f]{8})"               # 2023-123
-    )""",
+    r"""  # 034-2020-ECON-00189   |   123456
+(?:\b\d{3}-\d{4}-[A-Z]{4}-\d{5}\b   # NUC / IdDocumento con guiones
+        |     \b\d{6,}\b)                   # solo números (≥6)
+    """,
     re.VERBOSE | re.IGNORECASE,
 )
 
 def extract_identifier(text: str) -> Optional[str]:
-    m = ID_PATTERN.search(text)
-    return m.group(1) if m else None
+    """Devuelve el primer identificador (NUC o IdDocumento) encontrado."""
+    m = ID_PATTERN.search(text or "")
+    return m.group(0).lower() if m else None      # ← 0 en vez de 1
 
 def _doc_id(doc) -> Optional[str]:
     for key in ("NUC", "NumeroTramite", "DocumentID", "doc_id", "case_number"):
