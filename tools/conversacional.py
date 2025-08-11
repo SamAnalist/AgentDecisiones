@@ -45,7 +45,7 @@ def _collect_context(
         ctx.append({
             "type": "case",
             "id":   d.metadata.get("NUC") or d.metadata.get("IdDocumento") or "s/d",
-            "text": d.page_content[:2000]          # recorte para tokens
+            "text": d.page_content         # recorte para tokens
         })
 
     # 2) Leyes / criterios
@@ -106,6 +106,9 @@ def run(
         "Si la pregunta no es estrictamente legal, contéstala igualmente con la mejor "
         "respuesta posible, citando siempre las fuentes entre corchetes."
         f"Este es el historial de mensajes hasta ahora {history}"
+        "**IMPORTANTE** "
+        "1. Si el mensaje del usuario no requiere que consultes el historial y este cambia de tema totalmente, no lo tomes en cuenta e ignoralo."
+        "2. Debes preguntar al usuario en caso de que no estés seguro de un mensaje."
     )
     user = textwrap.dedent(f"""
         Pregunta del usuario:

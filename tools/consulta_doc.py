@@ -41,11 +41,12 @@ for fname in os.listdir(CHUNKS_DIR):
     md   = entry.get("metadata", {})
     text = entry.get("text", "")
 
-    for key in ("NUC", "NumeroTramite", "DocumentID"):
-        k_norm = str(md.get(key, "")).lower().lstrip("auto:").strip()
-        if k_norm:
-            docs_map.setdefault(k_norm, []).append(text)
+    for key in ("NUC", "NumeroTramite", "IdDocumento", "DocumentID"):
+        k = str(md.get(key, "")).lower().lstrip("auto:").strip(" _.,")
+        if k:
+            docs_map.setdefault(k, []).append(text)
 
+    # ── y al activar desde el texto/historial
 # ────────────── ID helpers ────────────────────────────────────────────
 ID_PATTERN = re.compile(
     r"""  # 034-2020-ECON-00189   |   123456
@@ -148,10 +149,10 @@ def run(user_msg: str) -> str:
     except:
         history = memory.load_memory_variables({})
     ident = extract_identifier(user_msg) or extract_identifier(str(history))
+    # ── y al activar desde el texto/historial, límpialo igual:
     if ident:
-        ident_n = ident.lower().strip()
+        ident_n = ident.lower().strip(" _.,")
         _set_active({"NUC": ident_n, "NumeroTramite": ident_n, "DocumentID": ident_n})
-
     if not active_doc:
         return "⚠️ No hay ninguna sentencia activa. Indica el número de caso."
 

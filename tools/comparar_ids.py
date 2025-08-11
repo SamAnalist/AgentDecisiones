@@ -70,7 +70,7 @@ def run(msg: str) -> str:
     """
     ids = _extract_two_ids(msg)
     if not ids:
-        return "⚠️ Debes indicar dos NUC o IdDocumento para comparar."
+        return "⚠️ No hallé precedentes relevantes en la base para esa consulta."
 
     id_a, id_b = ids
     text_a = _get_text(id_a)

@@ -103,7 +103,7 @@ def run(msg: str) -> str:
     q_vec = emb.embed_query(msg)
     docs  = search_by_vector(q_vec, k=K_RETRIEVE * 4)
     if not docs:
-        return "⚠️ No hallé precedentes relevantes."
+        return "⚠️ No hallé precedentes relevantes en la base para esa consulta."
 
     buenos = [d for d in docs if d.metadata.get("score", 1) >= SIM_THRESHOLD]
     if len(buenos) < K_RETRIEVE:

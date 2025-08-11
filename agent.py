@@ -117,7 +117,8 @@ def responder_pregunta(
     #         "⚠️ No estoy seguro de si tu petición es de naturaleza judicial. "
     #         "¿Podrías darme más detalles o reformular la pregunta?"
     #     )
-    msg = f"{question}\n\nHistorial de conversaciones:\n{history}" if label != "relacionar_juris" or label != "comparar_ids" else question
+    use_hist = (label == "conversacional")
+    msg = question if not use_hist else f"{question}\n\nHistorial de conversaciones:\n{history}"
     # 3) Llama a la tool
     respuesta = TOOL_MAP[label](msg)
     # 5) Guardar en memoria de conversación

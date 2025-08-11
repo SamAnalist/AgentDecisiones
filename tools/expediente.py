@@ -165,6 +165,9 @@ def run(msg: str) -> str:
     4. Formatea la respuesta Markdown.
     """
     row = _match_row(msg)
+    if row is None:
+        return "⚠️ No encontré ese expediente (NUC) ni IdDocumento en la Juriteca."
+
     from tools.consulta_doc import _set_active
     # ── activar sentencia para consulta_doc ────────────────────────────
     _set_active({
