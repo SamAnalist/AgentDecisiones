@@ -46,11 +46,16 @@ pytesseract.pytesseract.tesseract_cmd = TESSERACT_CMD  # línea clave
 
 # Configuración de conexión
 conn = pyodbc.connect(
-    "DRIVER={ODBC Driver 17 for SQL Server};"
+    "DRIVER={ODBC Driver 18 for SQL Server};"
     "SERVER=192.168.0.133;"
     "DATABASE=DepositoDocumentos;"
-    r"Trusted_Connection=yes;"         # << clave
-    r"TrustServerCertificate=yes;")
+    "UID=su-samfernandez;"
+    "PWD=Temporal100*;"
+    "Encrypt=yes;"
+    "TrustServerCertificate=yes;"
+    # opcional: "Timeout=5;"
+)
+
 cursor = conn.cursor()
 def extract_text_from_pdf_bytes(pdf_bytes: bytes) -> str:
     doc = fitz.open(stream=pdf_bytes, filetype="pdf")
@@ -78,25 +83,22 @@ WHERE c.activo = 1 AND c.NUC = '{nuc}'
 ORDER BY d.FechaCreacion
     """, conn)
     # Procesar fila por fila
-    texto_pdf = []
-    df["texto_pdf"] = ""
-    for _, row in df.iterrows():
+    # Procesar fila por fila (robusto: siempre escribe una celda)
+    df["texto_pdf"] = ""  # pre-crea la columna
+    for idx, row in df.iterrows():
         doc_id = row["NUC"]
         url = row["URL"]
-
+        texto = ""
         try:
-            print(f"Procesando ID {doc_id}...")
-            response = requests.get(url, timeout=20)
+            print(f"Procesando ID {doc_id}…")
+            response = requests.get(url, timeout=(6, 25))  # (connect, read)
             response.raise_for_status()
-
-            texto = extract_markdown(response.content)
-
-            print(texto)
-            texto_pdf.append(texto)
-            print(f"✅ Texto guardado para ID {doc_id}")
+            texto = extract_markdown(response.content) or ""
+            print(f"✅ Texto guardado para ID {doc_id} (len={len(texto)})")
         except Exception as e:
-            print(f"❌ Error con ID {doc_id}: {e}")
-    df["texto_pdf"] = texto_pdf
+            print(f"❌ Error con ID {doc_id}: {e}")  # deja texto=""
+        df.at[idx, "texto_pdf"] = texto
+
     return df
 
 print(colectar_texto(nuc="034-2021-ECON-00366"))

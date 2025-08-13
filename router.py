@@ -37,7 +37,7 @@ EXAMPLES = [
 {"role": "assistant", "content": "estadistica"},
 {"role": "user", "content": "audita la sentencia y dime qué artículos omitieron"},
 {"role": "assistant", "content": "auditoria_ley"},
-{"role": "user", "content": "[PDF:pdf@1234abcd] Resume el documento"},
+{"role": "user", "content": "Resume el documento de numero de caso XXX"},
 {"role": "assistant", "content": "resumen_doc"},
 {"role": "user", "content": "Compara 533-2020-ECON-00601 con 034-2019-ECON-01057"},
     {"role": "assistant", "content": "comparar_ids"},
@@ -111,10 +111,11 @@ SYSTEM_PROMPT = (
     ──────────────────────────────────────────────────────────────
       conversacional   → Query principal, priorizado para conversación fluida
        DISCLAIMER: A menos que el usuario pida algo especifico como en los otros queries, este siempre será el predeterminado.
-      expediente       → Consulta por un expediente o caso específico
+      expediente       → El usuario pide un expediente o caso específico
                          identificado (NUC, número de trámite, etc.).
       resumen_doc      → Petición explícita de un resumen de un documento
-                         concreto (por ID o «solo la sentencia final», «todo»).
+                         concreto específico identificado (NUC, número de trámite, etc.)
+                         (por ID o «solo la sentencia final», «todo»).
       consulta_doc     → Preguntas de detalle sobre el documento activo
                          (partes, argumentos, firmas, etc.).
       cronologia       → Solicita la línea de tiempo completa de un caso.

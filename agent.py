@@ -4,6 +4,7 @@ from memory import memory, register_pdf
 from router import detect_intent
 from tools import consulta_doc
 from tools.comparar_ids import run as comparar_ids_run
+from tools.cronología import run as cronologia_run
 
 # Tools adaptadas a (session_id, msg)
 from tools.expediente     import run as expediente_run
@@ -28,13 +29,13 @@ TOOL_MAP = {
     "resumen_doc":     resumen_run,         # (session_id, msg)
     "relacionar_juris":  comparar_run,        # (session_id, msg)
     "estadistica":     estadistica_run,     # (msg)
-    "borrador_alerta": alerta_run,          # (msg)
+    #"borrador_alerta": alerta_run,          # (msg)
     "consulta_doc":    consulta_run,        # (msg) — ya usa consulta_doc.active_doc
     "consulta_concepto": query_libre_run,   # (msg)
     "auditoria_ley":   auditoria_ley_run,
     "comparar_ids":   comparar_ids_run,
-    "conversacional": conversacional_run
-
+    "conversacional": conversacional_run,
+    "cronologia": cronologia_run
 }
 
 from typing import Tuple, Any, Optional
@@ -120,6 +121,7 @@ def responder_pregunta(
     use_hist = (label == "conversacional")
     msg = question if not use_hist else f"{question}\n\nHistorial de conversaciones:\n{history}"
     # 3) Llama a la tool
+    print(msg)
     respuesta = TOOL_MAP[label](msg)
     # 5) Guardar en memoria de conversación
     memory.save_context(
@@ -127,5 +129,4 @@ def responder_pregunta(
         {"assistant": respuesta},
     )
     history = memory.load_memory_variables({})
-    print(ultima_interaccion_filtrada(history, 100))
     return respuesta
